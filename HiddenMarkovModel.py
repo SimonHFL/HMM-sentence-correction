@@ -25,9 +25,6 @@ class HiddenMarkovModel(object):
 
 	def viterbi(self, observations):
 
-		#TODO backpointer
-		#TODO # strip() each word? 
-	
 		# create path probability matrix
 		path_probs = np.zeros((len(self.states), len(observations)))
 		backpointer = np.zeros((len(self.states), len(observations)))
