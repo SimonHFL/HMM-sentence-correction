@@ -12,74 +12,65 @@ class HiddenMarkovModel(object):
 		self.start_state_idx = start_state_idx
 		self.end_state_idx = end_state_idx
 
-	def get_emission_prob(self, hidden_state, observation):
-		distance = levenshtein.distance(hidden_state, observation)
-		return poisson.poisson_distribution(0.1, distance)
+	def get_future_states_and_transition_probs(self, state):
+		state_idx = self.states.index(state)
+		future_state_idxs = np.where( self.transition_probs[state_idx] != 0)[0]
+		return [ (self.states[i], self.transition_probs[state_idx, i]) for i in future_state_idxs ]
 
-	def backpointer_to_states(self, backpointer, time, idx):
-		if time < 0:
+	def get_final_transition_prob(self, state):
+		return self.transition_probs[self.states.index(state), self.end_state_idx]
+
+	def trellis_to_states(self, trellis, state, time):
+		if time == 0:
 			return ""
-		else:
-			state = self.states[idx]
-			idx = int(backpointer[idx, time])
-			return  self.backpointer_to_states(backpointer, time-1, idx) + " " + state
+		else: 
+			return self.trellis_to_states(trellis, trellis[time][state][1], time-1) + " " + state
 
-	def viterbi(self, observations):
+	def viterbi(self, observations, max_error_rate):
 
-		# create path probability matrix
-		path_probs = np.zeros((len(self.states), len(observations)))
-		# create backpointer matrix
-		backpointer = np.zeros((len(self.states), len(observations)))
+		trellis = [ { '<s>': (1., None) } ]
 
-		# initialization step 
-		for state_idx, state in enumerate(self.states):
-			transition_prob = self.transition_probs[self.start_state_idx, state_idx]
-			emission_prob = self.get_emission_prob(state, observations[0])
-			path_probs[state_idx, 0] =  transition_prob * emission_prob
-			backpointer[state_idx, 0] = self.start_state_idx
-
-		# recursion step
+		# fill out trellis
 		for obs_idx, observation in enumerate(observations):
-
-			if obs_idx == 0: # we already delt with the first observation
-				continue 
-
-			print("observation idx " + str(obs_idx))
 			
-			for state_idx, state in enumerate(self.states):
+			current_states = {}
+			trellis.append(current_states)
 
-				# print progress
-				if state_idx % 1000 == 0:
-					print("state % " + str(state_idx/len(self.states)))#, end='\r')
+			# set the maximum amount of errors that are allowed
+			max_errors = int(len(observation) * max_error_rate) + 1  
 
-				emission_prob = self.get_emission_prob(state, observation)
+			for prev_state in trellis[obs_idx].keys():
 
-				# find the most likely path to this state at this time
-				max_path_prob = -1
-				max_prev_state_idx = -1
-				for prev_state_idx, prev_state in enumerate(self.states):
-					transition_prob = self.transition_probs[prev_state_idx, state_idx]	
-					if transition_prob == 0:
-						continue	
-					path_prob = path_probs[prev_state_idx, obs_idx-1] * transition_prob * emission_prob
-					if(path_prob > max_path_prob):
-						max_path_prob = path_prob
-						max_prev_state_idx = prev_state_idx
+				prev_path_prob = trellis[obs_idx][prev_state][0]
 
-				path_probs[state_idx, obs_idx] = max_path_prob
-				backpointer[state_idx, obs_idx] = max_prev_state_idx
-			
+				for future_state, transition_prob in self.get_future_states_and_transition_probs(prev_state):
+
+					distance = levenshtein.distance(future_state, observation)
+
+					# if the levenshtein distance exceeds the maximum, 
+					# we disregard the path
+					if distance > max_errors: 
+						continue
+
+					emission_prob = poisson.poisson_distribution(0.1, distance)
+
+					path_prob = prev_path_prob * transition_prob * emission_prob
+
+					# only keep path with max probability
+					if future_state in current_states:
+						if current_states[future_state][0] >= path_prob:
+							continue
+
+					current_states[future_state] = (path_prob, prev_state)
+				
+
 		# termination step
 		max_final_path_prob = -1
-		max_final_state_idx = -1
-		for state_idx, state in enumerate(self.states):
-			final_path_prob = path_probs[state_idx, len(observations) - 1] * self.transition_probs[state_idx, self.end_state_idx]
+		max_final_state = None
+		for state in trellis[-1].keys():
+			final_path_prob = trellis[-1][state][0] * self.get_final_transition_prob(state)
 			if final_path_prob > max_final_path_prob:
 				max_final_path_prob = final_path_prob
-				max_final_state_idx = state_idx
-		print("end max prob")
-		print(max_final_path_prob)
-		path_probs[self.end_state_idx, len(observations) - 1] = max_final_path_prob
-		backpointer[self.end_state_idx, len(observations) - 1] = max_final_state_idx
+				max_final_state = state
 
-		return self.backpointer_to_states(backpointer, len(observations)-1, max_final_state_idx)
+		return self.trellis_to_states(trellis, max_final_state, len(trellis) - 1)
