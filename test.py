@@ -46,6 +46,7 @@ def correct_sentence(HMM, sentence):
     return HMM.viterbi(sentence.split(' '))
 
 HMM = HMM.HiddenMarkovModel( states, transition_probs, start_state_idx, end_state_idx )
-sentence = 'I are big'
+#sentence = 'she haf heard them'
+sentence = 'he said nit word by'
 result = correct_sentence(HMM, sentence)
 print(result)
