@@ -6,11 +6,11 @@ import sys
 
 class HiddenMarkovModel(object):
 
-	def __init__(self, states, transition_probs, start_state_idx, end_state_idx):
+	def __init__(self, states, transition_probs, start_state, end_state):
 		self.states = states
 		self.transition_probs = transition_probs
-		self.start_state_idx = start_state_idx
-		self.end_state_idx = end_state_idx
+		self.start_state = start_state
+		self.end_state = end_state
 
 	def get_future_states_and_transition_probs(self, state):
 		state_idx = self.states.index(state)
@@ -18,7 +18,12 @@ class HiddenMarkovModel(object):
 		return [ (self.states[i], self.transition_probs[state_idx, i]) for i in future_state_idxs ]
 
 	def get_final_transition_prob(self, state):
-		return self.transition_probs[self.states.index(state), self.end_state_idx]
+		# if the end state is not defined, we will disregard the 
+		# end state transition likelihood by setting the probability to 1
+		if self.end_state is None:
+			return 1.
+		else:
+			return self.transition_probs[self.states.index(state), self.states.index(self.end_state)]
 
 	def trellis_to_states(self, trellis, state, time):
 		if time == 0:
@@ -28,11 +33,12 @@ class HiddenMarkovModel(object):
 
 	def viterbi(self, observations, max_error_rate):
 
-		trellis = [ { '<s>': (1., None) } ]
+		trellis = [ { self.start_state: (1., None) } ]
 
 		# fill out trellis
 		for obs_idx, observation in enumerate(observations):
-			
+			#print( 'progress: ' + str(obs_idx + 1) + "/" + str(len(observations)), end='\r', flush=True)
+
 			current_states = {}
 			trellis.append(current_states)
 
@@ -72,5 +78,8 @@ class HiddenMarkovModel(object):
 			if final_path_prob > max_final_path_prob:
 				max_final_path_prob = final_path_prob
 				max_final_state = state
+
+		if max_final_state is None:
+			return None
 
 		return self.trellis_to_states(trellis, max_final_state, len(trellis) - 1)
