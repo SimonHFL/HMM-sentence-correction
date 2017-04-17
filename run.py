@@ -17,15 +17,20 @@ def get_vocab(vocab_file):
 
     return words
 
-def get_transition_probs(transition_probs_file):
+def get_transition_probs(transition_probs_file, offset_idx = True):
     df = pd.read_csv(transition_probs_file, delimiter=' ', header=None, names=['i', 'j', 'prob'])
 
     num_words = df.shape[0]
 
     transition_probs = np.zeros((num_words, num_words))
 
-    for idx, row in df.iterrows():        
-        transition_probs[int(row['i']-1), int(row['j']-1)] = 10 ** row['prob']
+    for idx, row in df.iterrows():   
+        i = int(row['i'])
+        j = int(row['j'])        
+        if offset_idx:
+            i -= 1
+            j -= 1
+        transition_probs[i , j] = 10 ** row['prob']
 
     return transition_probs
 
@@ -64,12 +69,14 @@ start_state = '<s>'
 end_state = '</s>'
 vocab_file = 'data/vocab.txt'
 transition_probs_file = 'data/bigram_counts.txt'
+offset_idx = True
 """
 
 start_state = '<S>'
 end_state = None
 vocab_file = 'data/google_n-gram/vocabulary.txt'
 transition_probs_file = 'data/google_n-gram/bigram_count.txt'
+offset_idx = False
 
 
 sentences = [
@@ -79,7 +86,7 @@ sentences = [
 ]
 
 states = get_vocab(vocab_file)
-transition_probs = get_transition_probs(transition_probs_file)
+transition_probs = get_transition_probs(transition_probs_file, offset_idx)
 
 HMM = HMM.HiddenMarkovModel( states, transition_probs, start_state, end_state)
 
